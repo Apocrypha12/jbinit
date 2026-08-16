@@ -1,0 +1,64 @@
+name: Build jbinit ramdisk
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/build-jbinit
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Show Apple toolchain
+        run: |
+          set -euxo pipefail
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Install Mach-O signing tool
+        run: brew install ldid
+
+      - name: Build ramdisk
+        run: |
+          set -euxo pipefail
+          make clean
+          make
+
+      - name: Verify outputs
+        run: |
+          set -euxo pipefail
+          test -s jbinit
+          test -s launchd
+          test -s jb.dylib
+          test -s ramdisk.dmg
+          file jbinit launchd jb.dylib ramdisk.dmg
+          lipo -info jbinit
+          lipo -info launchd
+          lipo -info jb.dylib
+          hdiutil imageinfo ramdisk.dmg
+          shasum -a 256 jbinit launchd jb.dylib ramdisk.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jbinit-ios15-arm64
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            jbinit
+            launchd
+            jb.dylib
+            ramdisk.dmg
+            SHA256SUMS.txt
